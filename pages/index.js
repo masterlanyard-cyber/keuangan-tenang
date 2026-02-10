@@ -1,282 +1,375 @@
-import { useState, useEffect } from "react";
+import { useSession, signOut } from "next-auth/react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/router";
+import { Pie } from "react-chartjs-2";
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 
-function rupiah(n) {
-  return "Rp " + Number(n || 0).toLocaleString("id-ID");
-}
+ChartJS.register(ArcElement, Tooltip, Legend);
+
+const FONT =
+  '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui';
+
+const rupiah = n => "Rp " + Number(n || 0).toLocaleString("id-ID");
+const CATEGORIES = ["Food","Transport","Housing","Utilities","Entertainment","Other"];
 
 export default function Home() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
   const [saldo, setSaldo] = useState(0);
-  const [jumlah, setJumlah] = useState("");
-  const [riwayat, setRiwayat] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [savingGoal, setSavingGoal] = useState(0);
+  const [investment, setInvestment] = useState(0);
+  const [hasLoaded, setHasLoaded] = useState(false);
+
+  // input
+  const [showInput, setShowInput] = useState(false);
+  const [editTx, setEditTx] = useState(null);
+  const [type, setType] = useState("Expense");
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("Food");
+  const [desc, setDesc] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().slice(0,10));
+
+  // filter
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   useEffect(() => {
-    const savedSaldo = localStorage.getItem("saldo");
-    const savedRiwayat = localStorage.getItem("riwayat");
+    if (status === "unauthenticated") router.replace("/login");
+  }, [status, router]);
 
-    if (savedSaldo !== null) setSaldo(Number(savedSaldo));
-    if (savedRiwayat !== null) setRiwayat(JSON.parse(savedRiwayat));
-  }, []);
+  if (!session) return null;
 
+  const key = `finance_${session.user.email}`;
+
+  // LOAD
   useEffect(() => {
-    localStorage.setItem("saldo", saldo);
-    localStorage.setItem("riwayat", JSON.stringify(riwayat));
-  }, [saldo, riwayat]);
+    if (typeof window === "undefined") return;
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const d = JSON.parse(raw);
+      setSaldo(d.saldo || 0);
+      setTransactions(d.transactions || []);
+      setSavingGoal(d.savingGoal || 0);
+      setInvestment(d.investment || 0);
+    }
+    setHasLoaded(true);
+  }, [key]);
 
-  function tambahIncome() {
-    const nilai = Number(jumlah);
-    if (!nilai) return;
+  // SAVE
+  useEffect(() => {
+    if (!hasLoaded) return;
+    localStorage.setItem(
+      key,
+      JSON.stringify({ saldo, transactions, savingGoal, investment })
+    );
+  }, [saldo, transactions, savingGoal, investment, hasLoaded, key]);
 
-    setSaldo(saldo + nilai);
-    setRiwayat([
-      { type: "Income", amount: nilai, time: new Date().toLocaleString() },
-      ...riwayat
-    ]);
-    setJumlah("");
+  function recalc(list){
+    let s = 0;
+    list.forEach(t => {
+      s += t.type === "Income" ? t.amount : -t.amount;
+    });
+    setSaldo(s);
   }
 
-  function tambahExpense() {
-    const nilai = Number(jumlah);
-    if (!nilai) return;
+  function saveTx(){
+    const n = Number(amount);
+    if (!n) return;
 
-    setSaldo(saldo - nilai);
-    setRiwayat([
-      { type: "Expense", amount: nilai, time: new Date().toLocaleString() },
-      ...riwayat
-    ]);
-    setJumlah("");
-  }
-
-  function resetData() {
-    if (!confirm("Yakin ingin menghapus semua data?")) return;
-    setSaldo(0);
-    setRiwayat([]);
-    localStorage.removeItem("saldo");
-    localStorage.removeItem("riwayat");
-  }
-
-  function exportCSV() {
-    if (riwayat.length === 0) {
-      alert("Tidak ada data untuk diexport");
-      return;
+    let finalType = type;
+    let finalCategory = category;
+    if (type === "Salary") {
+      finalType = "Income";
+      finalCategory = "Salary";
     }
 
-    const header = ["Tanggal", "Tipe", "Nominal"];
-    const rows = riwayat.map(item => [
-      item.time,
-      item.type,
-      item.amount
-    ]);
+    const tx = {
+      id: editTx?.id || crypto.randomUUID(),
+      type: finalType,
+      source: type,
+      category: finalCategory,
+      amount: n,
+      description: desc,
+      time: new Date(date).toISOString()
+    };
 
-    const csv =
-      [header, ...rows].map(r => r.join(",")).join("\n");
+    const updated = editTx
+      ? transactions.map(t => t.id === editTx.id ? tx : t)
+      : [tx, ...transactions];
 
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "riwayat_keuangan.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+    setTransactions(updated);
+    recalc(updated);
+    resetForm();
   }
 
-  // === LAPORAN ===
-  const totalIncome = riwayat
-    .filter(r => r.type === "Income")
-    .reduce((sum, r) => sum + r.amount, 0);
+  function resetForm(){
+    setShowInput(false);
+    setEditTx(null);
+    setType("Expense");
+    setAmount("");
+    setCategory("Food");
+    setDesc("");
+    setDate(new Date().toISOString().slice(0,10));
+  }
 
-  const totalExpense = riwayat
-    .filter(r => r.type === "Expense")
-    .reduce((sum, r) => sum + r.amount, 0);
+  function removeTx(id){
+    const updated = transactions.filter(t => t.id !== id);
+    setTransactions(updated);
+    recalc(updated);
+  }
 
-  const net = totalIncome - totalExpense;
+  const filtered = transactions.filter(t => {
+    const d = t.time.slice(0,10);
+    if (fromDate && d < fromDate) return false;
+    if (toDate && d > toDate) return false;
+    return true;
+  });
+
+  // ===== DASHBOARD =====
+  const ym = new Date().toISOString().slice(0,7);
+
+  const monthly = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    const byCategory = {};
+    transactions.forEach(t => {
+      if (!t.time.startsWith(ym)) return;
+      if (t.type === "Income") income += t.amount;
+      if (t.type === "Expense") {
+        expense += t.amount;
+        byCategory[t.category] = (byCategory[t.category] || 0) + t.amount;
+      }
+    });
+    return { income, expense, byCategory };
+  }, [transactions, ym]);
+
+  const pieData = {
+    labels: Object.keys(monthly.byCategory),
+    datasets: [{
+      data: Object.values(monthly.byCategory),
+      backgroundColor: ["#d4af37","#4ade80","#60a5fa","#f472b6","#f87171","#a78bfa"],
+      borderWidth: 0
+    }]
+  };
+
+  const savingProgress =
+    savingGoal > 0 ? Math.min((saldo / savingGoal) * 100, 100) : 0;
+
+  // ===== AI INSIGHT (LEMBUT) =====
+  const aiInsight = useMemo(() => {
+    if (transactions.length === 0) {
+      return "Anda belum memiliki data transaksi. Mulailah mencatat secara perlahan untuk mendapatkan insight keuangan yang lebih personal.";
+    }
+
+    let msg = [];
+    if (monthly.income > monthly.expense) {
+      msg.push("Secara umum kondisi keuangan Anda bulan ini tergolong stabil, karena pemasukan masih lebih besar daripada pengeluaran.");
+    } else if (monthly.income < monthly.expense) {
+      msg.push("Bulan ini pengeluaran Anda sedikit lebih besar dari pemasukan. Tidak perlu khawatir, ini bisa diperbaiki secara bertahap.");
+    } else {
+      msg.push("Pemasukan dan pengeluaran Anda bulan ini berada di titik seimbang.");
+    }
+
+    const topCategory = Object.entries(monthly.byCategory)
+      .sort((a,b)=>b[1]-a[1])[0];
+
+    if (topCategory) {
+      msg.push(
+        `Pengeluaran terbesar Anda berada di kategori ${topCategory[0]}. Mengurangi sedikit dari kategori ini bisa memberi ruang lebih untuk menabung.`
+      );
+    }
+
+    if (savingGoal > 0) {
+      if (savingProgress >= 100) {
+        msg.push("Selamat! Target saving Anda telah tercapai. Anda bisa mempertimbangkan target baru atau mulai fokus ke investasi.");
+      } else {
+        msg.push(`Progress saving Anda saat ini sekitar ${savingProgress.toFixed(1)}%. Konsistensi kecil setiap bulan sudah sangat membantu.`);
+      }
+    }
+
+    return msg.join(" ");
+  }, [transactions, monthly, savingGoal, savingProgress]);
 
   return (
-    <div style={styles.page}>
-      <h1 style={styles.title}>Dashboard Keuangan</h1>
-
-      {/* SALDO */}
-      <div style={styles.card}>
-        <div style={styles.label}>Saldo Saat Ini</div>
-        <div style={styles.saldo}>{rupiah(saldo)}</div>
-      </div>
-
-      {/* LAPORAN */}
-      <div style={styles.report}>
-        <div style={styles.reportCard}>
-          <div>Total Income</div>
-          <strong style={{ color: "#2ecc71" }}>
-            {rupiah(totalIncome)}
-          </strong>
+    <div style={{ ...S.page, fontFamily: FONT }}>
+      {/* HEADER */}
+      <header style={S.header}>
+        <div>
+          <div style={S.brand}>EXECUTIVE FINANCE</div>
+          <div style={S.email}>{session.user.email}</div>
         </div>
-        <div style={styles.reportCard}>
-          <div>Total Expense</div>
-          <strong style={{ color: "#e74c3c" }}>
-            {rupiah(totalExpense)}
-          </strong>
+        <div>
+          <button style={S.addBtn} onClick={()=>setShowInput(true)}>＋ Add</button>
+          <button style={S.logout} onClick={()=>signOut()}>Logout</button>
         </div>
-        <div style={styles.reportCard}>
-          <div>Net</div>
-          <strong>
-            {rupiah(net)}
-          </strong>
-        </div>
-      </div>
+      </header>
 
-      {/* INPUT */}
-      <div style={styles.inputBox}>
+      {/* NET WORTH */}
+      <section style={S.hero}>
+        <div style={S.label}>Net Worth</div>
+        <div style={S.heroValue}>{rupiah(saldo + investment)}</div>
+        <div style={S.subtle}>
+          Cash {rupiah(saldo)} · Investment {rupiah(investment)}
+        </div>
+      </section>
+
+      {/* SUMMARY */}
+      <section style={S.grid}>
+        <div style={S.card}>
+          <div style={S.label}>Monthly Income</div>
+          <div style={{ ...S.value, color:"#22c55e" }}>{rupiah(monthly.income)}</div>
+        </div>
+        <div style={S.card}>
+          <div style={S.label}>Monthly Expense</div>
+          <div style={{ ...S.value, color:"#ef4444" }}>{rupiah(monthly.expense)}</div>
+        </div>
+        <div style={S.card}>
+          <div style={S.label}>Net Cashflow</div>
+          <div style={S.value}>{rupiah(monthly.income - monthly.expense)}</div>
+        </div>
+      </section>
+
+      {/* AI INSIGHT */}
+      <section style={S.cardWide}>
+        <div style={S.label}>AI Financial Insight</div>
+        <div style={S.aiText}>{aiInsight}</div>
+      </section>
+
+      {/* SAVING */}
+      <section style={S.card}>
+        <div style={S.label}>Saving Goal</div>
         <input
           type="number"
-          value={jumlah}
-          onChange={(e) => setJumlah(e.target.value)}
-          placeholder="Masukkan nominal"
-          style={styles.input}
+          placeholder="Target Saving"
+          value={savingGoal}
+          onChange={e=>setSavingGoal(Number(e.target.value))}
+          style={S.input}
         />
-        <button onClick={tambahIncome} style={styles.incomeBtn}>
-          + Income
-        </button>
-        <button onClick={tambahExpense} style={styles.expenseBtn}>
-          - Expense
-        </button>
-      </div>
+        <div style={S.progressBg}>
+          <div style={{ ...S.progressFill, width: `${savingProgress}%` }} />
+        </div>
+        <div style={S.muted}>
+          {savingProgress.toFixed(1)}% · Target {rupiah(savingGoal)}
+        </div>
+      </section>
 
-      {/* ACTION */}
-      <div style={{ marginBottom: 16 }}>
-        <button onClick={exportCSV} style={styles.exportBtn}>
-          Export CSV
-        </button>
-        <button onClick={resetData} style={styles.resetBtn}>
-          Reset Data
-        </button>
-      </div>
+      {/* INVESTMENT */}
+      <section style={S.card}>
+        <div style={S.label}>Investment</div>
+        <input
+          type="number"
+          placeholder="Total Investment"
+          value={investment}
+          onChange={e=>setInvestment(Number(e.target.value))}
+          style={S.input}
+        />
+      </section>
 
-      {/* RIWAYAT */}
-      <div style={styles.card}>
-        <h3>Riwayat Transaksi</h3>
+      {/* PIE */}
+      <section style={S.cardWide}>
+        <div style={S.label}>Spending Distribution</div>
+        {pieData.labels.length === 0
+          ? <div style={S.muted}>No expense this month</div>
+          : <div style={{maxWidth:360}}><Pie data={pieData}/></div>}
+      </section>
 
-        {riwayat.length === 0 && <p>Belum ada transaksi</p>}
+      {/* FILTER */}
+      <section style={S.card}>
+        <div style={S.label}>Filter Tanggal</div>
+        <div style={{display:"flex",gap:12}}>
+          <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} style={S.input}/>
+          <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} style={S.input}/>
+        </div>
+      </section>
 
-        <ul style={styles.list}>
-          {riwayat.map((item, index) => (
-            <li key={index} style={styles.listItem}>
-              <span>
-                <strong
-                  style={{
-                    color:
-                      item.type === "Income" ? "#2ecc71" : "#e74c3c"
-                  }}
-                >
-                  {item.type}
-                </strong>{" "}
-                {rupiah(item.amount)}
-              </span>
-              <span style={styles.time}>{item.time}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {/* LIST */}
+      <section style={S.card}>
+        <div style={S.label}>Riwayat Transaksi</div>
+        {filtered.length === 0 && <div style={S.muted}>Tidak ada data</div>}
+        {filtered.map(t=>(
+          <div key={t.id} style={S.row}>
+            <div>
+              <div style={S.date}>{t.time.slice(0,10)}</div>
+              <div>{t.category}</div>
+              {t.description && <div style={S.desc}>{t.description}</div>}
+            </div>
+            <div style={{color:t.type==="Income"?"#22c55e":"#ef4444"}}>
+              {t.type==="Income"?"+":"-"}{rupiah(t.amount)}
+            </div>
+            <div>
+              <button onClick={()=>{
+                setEditTx(t);
+                setShowInput(true);
+                setType(t.source);
+                setAmount(t.amount);
+                setCategory(t.category);
+                setDesc(t.description||"");
+                setDate(t.time.slice(0,10));
+              }}>✏️</button>
+              <button onClick={()=>removeTx(t.id)}>🗑</button>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      {/* MODAL */}
+      {showInput && (
+        <div style={S.modalBg}>
+          <div style={S.modal}>
+            <div style={S.modalTitle}>{editTx?"Edit":"Add"} Transaction</div>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={S.input}/>
+            <select value={type} onChange={e=>setType(e.target.value)} style={S.input}>
+              <option>Expense</option>
+              <option>Income</option>
+              <option>Salary</option>
+            </select>
+            <input type="number" placeholder="Amount" value={amount}
+              onChange={e=>setAmount(e.target.value)} style={S.input}/>
+            {type==="Expense" && (
+              <select value={category} onChange={e=>setCategory(e.target.value)} style={S.input}>
+                {CATEGORIES.map(c=><option key={c}>{c}</option>)}
+              </select>
+            )}
+            <input placeholder="Description / Remark" value={desc}
+              onChange={e=>setDesc(e.target.value)} style={S.input}/>
+            <button style={S.primaryBtn} onClick={saveTx}>Save</button>
+            <button style={S.secondaryBtn} onClick={resetForm}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-const styles = {
-  page: {
-    padding: 32,
-    maxWidth: 700,
-    margin: "0 auto",
-    fontFamily: "Arial, sans-serif",
-    background: "#f5f7fb",
-    minHeight: "100vh"
-  },
-  title: {
-    marginBottom: 20
-  },
-  card: {
-    background: "#fff",
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-    boxShadow: "0 6px 16px rgba(0,0,0,0.06)"
-  },
-  label: {
-    fontSize: 14,
-    color: "#666"
-  },
-  saldo: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginTop: 8
-  },
-  report: {
-    display: "flex",
-    gap: 12,
-    marginBottom: 20
-  },
-  reportCard: {
-    flex: 1,
-    background: "#fff",
-    borderRadius: 10,
-    padding: 16,
-    textAlign: "center",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.05)"
-  },
-  inputBox: {
-    display: "flex",
-    gap: 10,
-    marginBottom: 10
-  },
-  input: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 8,
-    border: "1px solid #ccc"
-  },
-  incomeBtn: {
-    background: "#2ecc71",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    padding: "10px 14px",
-    cursor: "pointer"
-  },
-  expenseBtn: {
-    background: "#e74c3c",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    padding: "10px 14px",
-    cursor: "pointer"
-  },
-  exportBtn: {
-    background: "#3498db",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    padding: "8px 12px",
-    marginRight: 8,
-    cursor: "pointer"
-  },
-  resetBtn: {
-    background: "#888",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    padding: "8px 12px",
-    cursor: "pointer"
-  },
-  list: {
-    listStyle: "none",
-    padding: 0,
-    marginTop: 12
-  },
-  listItem: {
-    display: "flex",
-    justifyContent: "space-between",
-    padding: "8px 0",
-    borderBottom: "1px solid #eee"
-  },
-  time: {
-    fontSize: 12,
-    color: "#999"
-  }
+const S = {
+  page:{minHeight:"100vh",background:"#0f1115",color:"#e5e7eb",padding:"64px 72px"},
+  header:{display:"flex",justifyContent:"space-between",marginBottom:36},
+  brand:{fontSize:22,fontWeight:600,letterSpacing:1.5},
+  email:{fontSize:12,color:"#9ca3af",marginTop:6},
+  addBtn:{background:"#d4af37",border:"none",borderRadius:10,padding:"10px 16px"},
+  logout:{marginLeft:10,background:"#1f2933",color:"#e5e7eb",border:"1px solid #374151",borderRadius:10,padding:"10px 16px"},
+  hero:{background:"linear-gradient(135deg,#0b1220,#0f1a2e)",borderRadius:28,padding:36,marginBottom:36},
+  heroValue:{fontSize:40,fontWeight:700},
+  subtle:{fontSize:12,color:"#9ca3af",marginTop:6},
+  grid:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:24,marginBottom:36},
+  card:{background:"#111827",borderRadius:24,padding:28,marginBottom:28},
+  cardWide:{background:"#111827",borderRadius:24,padding:28,marginBottom:28},
+  label:{fontSize:13,color:"#9ca3af",marginBottom:6},
+  value:{fontSize:28,fontWeight:600},
+  muted:{fontSize:13,color:"#9ca3af"},
+  row:{display:"flex",justifyContent:"space-between",padding:"12px 0",borderBottom:"1px solid #1f2933"},
+  date:{fontSize:12,color:"#9ca3af"},
+  desc:{fontSize:12,color:"#9ca3af",marginTop:4},
+  input:{width:"100%",padding:10,marginBottom:10,background:"#0f172a",color:"#e5e7eb",border:"1px solid #374151",borderRadius:8},
+  progressBg:{width:"100%",height:10,background:"#1f2933",borderRadius:6,overflow:"hidden",margin:"10px 0"},
+  progressFill:{height:"100%",background:"#d4af37"},
+  aiText:{fontSize:14,lineHeight:1.7,color:"#e5e7eb"},
+  modalBg:{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"center",justifyContent:"center"},
+  modal:{background:"#111827",borderRadius:16,padding:24,width:360},
+  modalTitle:{fontWeight:600,marginBottom:12},
+  primaryBtn:{background:"#d4af37",border:"none",borderRadius:8,padding:10,width:"100%"},
+  secondaryBtn:{marginTop:6,width:"100%",background:"#1f2933",color:"#e5e7eb",border:"none",borderRadius:8,padding:10}
 };
 
