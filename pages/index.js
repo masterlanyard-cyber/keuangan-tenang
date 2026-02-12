@@ -128,7 +128,11 @@ export default function Home() {
   });
 
   // ===== DASHBOARD =====
-  const ym = new Date().toISOString().slice(0,7);
+  const [ym, setYm] = useState("");
+
+useEffect(() => {
+  setYm(new Date().toISOString().slice(0,7));
+}, []);
 
   const monthly = useMemo(() => {
     let income = 0;
