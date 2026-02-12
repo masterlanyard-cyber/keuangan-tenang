@@ -12,6 +12,7 @@ const FONT =
 const rupiah = n => "Rp " + Number(n || 0).toLocaleString("id-ID");
 const CATEGORIES = ["Food","Transport","Housing","Utilities","Entertainment","Other"];
 
+import dynamic from "next/dynamic";
 export default function Home() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -39,7 +40,16 @@ export default function Home() {
     if (status === "unauthenticated") router.replace("/login");
   }, [status, router]);
 
-  if (!session) return null;
+  if (status === "loading") {
+  return null;
+}
+export default dynamic(() => Promise.resolve(Home), {
+  ssr: false,
+});
+
+if (!session) {
+  return null;
+}
 
   const key = `finance_${session.user.email}`;
 
