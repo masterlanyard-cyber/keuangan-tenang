@@ -2,10 +2,9 @@ import dynamic from "next/dynamic";
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { Pie } from "react-chartjs-2";
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
-
-ChartJS.register(ArcElement, Tooltip, Legend);
+// import { Pie } from "react-chartjs-2";
+// import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
+// ChartJS.register(ArcElement, Tooltip, Legend);
 
 const FONT =
   '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui';
@@ -37,7 +36,14 @@ function Home() {
   if (status === "loading") return null;
   if (!session) return null;
 
-  const key = `finance_${session.user.email}`;
+  const [storageKey, setStorageKey] = useState(null);
+
+useEffect(() => {
+  if (session?.user?.email) {
+    setStorageKey(`finance_${session.user.email}`);
+  }
+}, [session]);
+
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -107,7 +113,7 @@ function Home() {
       </div>
 
       <div style={{ marginTop:40, maxWidth:360 }}>
-        {pieData.labels.length > 0 && <Pie data={pieData} />}
+        {/* {pieData.labels.length > 0 && <Pie data={pieData} />} */}
       </div>
     </div>
   );
