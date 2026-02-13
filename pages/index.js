@@ -1,38 +1,30 @@
+import { getSession } from "next-auth/react";
 import dynamic from "next/dynamic";
-import { useSession, signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/router";
 
-function Home() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-  const [mounted, setMounted] = useState(false);
+const Dashboard = dynamic(() => import("../components/Dashboard"), {
+  ssr: false,
+});
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (mounted && status === "unauthenticated") {
-      router.replace("/login");
-    }
-  }, [mounted, status, router]);
-
-  if (!mounted) return null;
-  if (status === "loading") return null;
-  if (!session) return null;
-
-  return (
-    <div style={{ padding: 40 }}>
-      <h2>Executive Finance</h2>
-      <div>{session.user.email}</div>
-      <button onClick={() => signOut()}>Logout</button>
-      <div style={{ marginTop: 30 }}>
-        Dashboard loaded successfully.
-      </div>
-    </div>
-  );
+export default function Home({ userEmail }) {
+  return <Dashboard userEmail={userEmail} />;
 }
 
-export default dynamic(() => Promise.resolve(Home), { ssr: false });
+export async function getServerSideProps(context) {
+  const session = await getSession(context);
+
+  if (!session) {
+    return {
+      redirect: {
+        destination: "/login",
+        permanent: false,
+      },
+    };
+  }
+
+  return {
+    props: {
+      userEmail: session.user.email,
+    },
+  };
+}
 
