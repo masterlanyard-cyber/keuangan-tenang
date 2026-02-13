@@ -33,7 +33,6 @@ export default function Dashboard({ userEmail }) {
 
   useEffect(() => {
     if (!mounted) return;
-
     try {
       const raw = localStorage.getItem(
         `finance_${userEmail}`
@@ -59,7 +58,6 @@ export default function Dashboard({ userEmail }) {
 
   useEffect(() => {
     if (!mounted) return;
-
     localStorage.setItem(
       `finance_${userEmail}`,
       JSON.stringify({
@@ -81,7 +79,6 @@ export default function Dashboard({ userEmail }) {
       saldo += t.amount;
     } else {
       saldo -= t.amount;
-
       if (t.category) {
         categoryTotals[t.category] =
           (categoryTotals[t.category] || 0) +
@@ -131,10 +128,11 @@ export default function Dashboard({ userEmail }) {
 
   return (
     <div style={S.page}>
-      <div style={S.card}>
+      <div style={S.container}>
+        {/* HEADER */}
         <div style={S.header}>
           <div>
-            <div style={S.title}>
+            <div style={S.brand}>
               Executive Finance
             </div>
             <div style={S.email}>
@@ -149,20 +147,24 @@ export default function Dashboard({ userEmail }) {
           </button>
         </div>
 
+        {/* NET WORTH CARD */}
         <div style={S.hero}>
-          <div style={S.label}>Saldo</div>
-          <div style={S.saldo}>
+          <div style={S.heroLabel}>
+            Net Balance
+          </div>
+          <div style={S.heroValue}>
             {rupiah(saldo)}
           </div>
         </div>
 
-        <div style={S.section}>
-          <div style={S.label}>
+        {/* SAVING PROGRESS */}
+        <div style={S.sectionCard}>
+          <div style={S.sectionTitle}>
             Saving Goal
           </div>
           <input
             type="number"
-            placeholder="Target"
+            placeholder="Target Amount"
             value={savingGoal}
             onChange={(e) =>
               setSavingGoal(
@@ -179,9 +181,17 @@ export default function Dashboard({ userEmail }) {
               }}
             />
           </div>
+          <div style={S.progressText}>
+            {savingProgress.toFixed(1)}%
+          </div>
         </div>
 
-        <div style={S.section}>
+        {/* ADD TRANSACTION */}
+        <div style={S.sectionCard}>
+          <div style={S.sectionTitle}>
+            Add Transaction
+          </div>
+
           <select
             value={type}
             onChange={(e) =>
@@ -222,31 +232,41 @@ export default function Dashboard({ userEmail }) {
           />
 
           <button
-            style={S.button}
+            style={S.primaryButton}
             onClick={addTransaction}
           >
             Add
           </button>
         </div>
 
+        {/* PIE CHART */}
         {Object.keys(categoryTotals)
           .length > 0 && (
-          <div style={{ marginTop: 30 }}>
+          <div style={S.sectionCard}>
+            <div style={S.sectionTitle}>
+              Spending Distribution
+            </div>
             <ChartSection data={pieData} />
           </div>
         )}
 
-        <div style={{ marginTop: 30 }}>
+        {/* TRANSACTION LIST */}
+        <div style={S.sectionCard}>
+          <div style={S.sectionTitle}>
+            Transactions
+          </div>
+
           {transactions.map((t) => (
             <div
               key={t.id}
               style={S.row}
             >
-              <div>
+              <div style={S.rowLeft}>
                 {t.category}
               </div>
               <div
                 style={{
+                  ...S.rowRight,
                   color:
                     t.type === "Income"
                       ? "#22c55e"
@@ -269,86 +289,113 @@ export default function Dashboard({ userEmail }) {
 const S = {
   page: {
     minHeight: "100vh",
-    background: "#0f1115",
-    padding: 16,
+    background:
+      "linear-gradient(135deg,#0b1220,#0f172a)",
+    padding: 20,
     display: "flex",
     justifyContent: "center",
   },
-  card: {
+  container: {
     width: "100%",
-    maxWidth: 520,
-    background: "#111827",
-    borderRadius: 20,
-    padding: 24,
-    color: "#e5e7eb",
+    maxWidth: 540,
   },
   header: {
     display: "flex",
     justifyContent: "space-between",
-    marginBottom: 20,
-    flexWrap: "wrap",
+    alignItems: "center",
+    marginBottom: 24,
   },
-  title: {
-    fontSize: 20,
+  brand: {
+    fontSize: 22,
     fontWeight: 600,
+    letterSpacing: 0.5,
   },
   email: {
     fontSize: 12,
     color: "#9ca3af",
   },
   logout: {
-    background: "#1f2937",
+    background: "rgba(255,255,255,0.08)",
     border: "none",
+    padding: "8px 14px",
+    borderRadius: 12,
     color: "#fff",
-    padding: "8px 12px",
-    borderRadius: 8,
+    backdropFilter: "blur(8px)",
   },
-  hero: { marginBottom: 20 },
-  label: {
+  hero: {
+    background:
+      "linear-gradient(135deg,#1f2937,#111827)",
+    padding: 28,
+    borderRadius: 24,
+    marginBottom: 24,
+  },
+  heroLabel: {
     fontSize: 12,
     color: "#9ca3af",
+    marginBottom: 6,
   },
-  saldo: {
-    fontSize: 28,
+  heroValue: {
+    fontSize: 34,
     fontWeight: 700,
   },
-  section: {
-    marginTop: 20,
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
+  sectionCard: {
+    background: "rgba(255,255,255,0.05)",
+    padding: 20,
+    borderRadius: 20,
+    marginBottom: 20,
+    backdropFilter: "blur(12px)",
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: 600,
+    marginBottom: 12,
   },
   input: {
-    padding: 10,
-    borderRadius: 8,
+    padding: 12,
+    borderRadius: 12,
     border: "1px solid #374151",
     background: "#0f172a",
     color: "#fff",
+    marginBottom: 10,
   },
-  button: {
-    padding: 12,
-    borderRadius: 8,
-    background: "#d4af37",
+  primaryButton: {
+    padding: 14,
+    borderRadius: 14,
+    background:
+      "linear-gradient(135deg,#d4af37,#facc15)",
     border: "none",
     fontWeight: 600,
   },
   progressBg: {
-    height: 8,
+    height: 10,
     background: "#1f2937",
-    borderRadius: 6,
+    borderRadius: 8,
+    marginTop: 6,
   },
   progressFill: {
     height: "100%",
-    background: "#d4af37",
-    borderRadius: 6,
+    background:
+      "linear-gradient(135deg,#d4af37,#facc15)",
+    borderRadius: 8,
+  },
+  progressText: {
+    fontSize: 12,
+    marginTop: 6,
+    color: "#9ca3af",
   },
   row: {
     display: "flex",
     justifyContent: "space-between",
+    padding: 12,
+    borderRadius: 14,
     background: "#1f2937",
-    padding: 10,
-    borderRadius: 8,
     marginBottom: 8,
+  },
+  rowLeft: {
+    fontSize: 14,
+  },
+  rowRight: {
+    fontWeight: 600,
   },
 };
 
