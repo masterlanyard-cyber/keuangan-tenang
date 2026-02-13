@@ -2,20 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { signOut } from "next-auth/react";
 
-const Pie = dynamic(
-  () =>
-    import("react-chartjs-2").then((mod) => mod.Pie),
+const ChartSection = dynamic(
+  () => import("./ChartSection"),
   { ssr: false }
 );
-
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend,
-} from "chart.js";
-
-ChartJS.register(ArcElement, Tooltip, Legend);
 
 const rupiah = (n) =>
   "Rp " + Number(n || 0).toLocaleString("id-ID");
@@ -36,8 +26,6 @@ export default function Dashboard({ userEmail }) {
   const [type, setType] = useState("Expense");
   const [category, setCategory] = useState("Food");
   const [savingGoal, setSavingGoal] = useState(0);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
 
   useEffect(() => {
     setMounted(true);
@@ -68,14 +56,7 @@ export default function Dashboard({ userEmail }) {
 
   if (!mounted) return null;
 
-  const filtered = transactions.filter((t) => {
-    const d = t.date;
-    if (fromDate && d < fromDate) return false;
-    if (toDate && d > toDate) return false;
-    return true;
-  });
-
-  const saldo = filtered.reduce((acc, t) => {
+  const saldo = transactions.reduce((acc, t) => {
     return t.type === "Income"
       ? acc + t.amount
       : acc - t.amount;
@@ -104,14 +85,14 @@ export default function Dashboard({ userEmail }) {
 
   const categoryTotals = useMemo(() => {
     const totals = {};
-    filtered.forEach((t) => {
+    transactions.forEach((t) => {
       if (t.type === "Expense") {
         totals[t.category] =
           (totals[t.category] || 0) + t.amount;
       }
     });
     return totals;
-  }, [filtered]);
+  }, [transactions]);
 
   const pieData = {
     labels: Object.keys(categoryTotals),
@@ -155,7 +136,6 @@ export default function Dashboard({ userEmail }) {
           </div>
         </div>
 
-        {/* Saving Goal */}
         <div style={S.section}>
           <div style={S.label}>Saving Goal</div>
           <input
@@ -175,12 +155,8 @@ export default function Dashboard({ userEmail }) {
               }}
             />
           </div>
-          <div style={S.muted}>
-            {savingProgress.toFixed(1)}%
-          </div>
         </div>
 
-        {/* Add Transaction */}
         <div style={S.section}>
           <select
             value={type}
@@ -223,43 +199,18 @@ export default function Dashboard({ userEmail }) {
           </button>
         </div>
 
-        {/* Filter */}
-        <div style={S.section}>
-          <div style={S.label}>
-            Filter Date
-          </div>
-          <input
-            type="date"
-            value={fromDate}
-            onChange={(e) =>
-              setFromDate(e.target.value)
-            }
-            style={S.input}
-          />
-          <input
-            type="date"
-            value={toDate}
-            onChange={(e) =>
-              setToDate(e.target.value)
-            }
-            style={S.input}
-          />
-        </div>
-
-        {/* Pie Chart */}
         {Object.keys(categoryTotals).length >
           0 && (
           <div style={{ marginTop: 30 }}>
-            <Pie data={pieData} />
+            <ChartSection data={pieData} />
           </div>
         )}
 
-        {/* List */}
         <div style={{ marginTop: 30 }}>
-          {filtered.map((t) => (
+          {transactions.map((t) => (
             <div key={t.id} style={S.row}>
               <div>
-                {t.date} - {t.category}
+                {t.category}
               </div>
               <div
                 style={{
@@ -311,17 +262,9 @@ const S = {
     padding: "8px 12px",
     borderRadius: 8,
   },
-  hero: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 12,
-    color: "#9ca3af",
-  },
-  saldo: {
-    fontSize: 28,
-    fontWeight: 700,
-  },
+  hero: { marginBottom: 20 },
+  label: { fontSize: 12, color: "#9ca3af" },
+  saldo: { fontSize: 28, fontWeight: 700 },
   section: {
     marginTop: 20,
     display: "flex",
@@ -352,7 +295,6 @@ const S = {
     background: "#d4af37",
     borderRadius: 6,
   },
-  muted: { fontSize: 12, color: "#9ca3af" },
   row: {
     display: "flex",
     justifyContent: "space-between",
