@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { signOut } from "next-auth/react";
 
@@ -33,18 +33,33 @@ export default function Dashboard({ userEmail }) {
 
   useEffect(() => {
     if (!mounted) return;
-    const raw = localStorage.getItem(
-      `finance_${userEmail}`
-    );
-    if (raw) {
-      const data = JSON.parse(raw);
-      setTransactions(data.transactions || []);
-      setSavingGoal(data.savingGoal || 0);
+
+    try {
+      const raw = localStorage.getItem(
+        `finance_${userEmail}`
+      );
+      if (raw) {
+        const data = JSON.parse(raw);
+        setTransactions(
+          Array.isArray(data.transactions)
+            ? data.transactions
+            : []
+        );
+        setSavingGoal(
+          typeof data.savingGoal === "number"
+            ? data.savingGoal
+            : 0
+        );
+      }
+    } catch {
+      setTransactions([]);
+      setSavingGoal(0);
     }
   }, [mounted, userEmail]);
 
   useEffect(() => {
     if (!mounted) return;
+
     localStorage.setItem(
       `finance_${userEmail}`,
       JSON.stringify({
@@ -56,11 +71,24 @@ export default function Dashboard({ userEmail }) {
 
   if (!mounted) return null;
 
-  const saldo = transactions.reduce((acc, t) => {
-    return t.type === "Income"
-      ? acc + t.amount
-      : acc - t.amount;
-  }, 0);
+  let saldo = 0;
+  const categoryTotals = {};
+
+  transactions.forEach((t) => {
+    if (!t || typeof t.amount !== "number") return;
+
+    if (t.type === "Income") {
+      saldo += t.amount;
+    } else {
+      saldo -= t.amount;
+
+      if (t.category) {
+        categoryTotals[t.category] =
+          (categoryTotals[t.category] || 0) +
+          t.amount;
+      }
+    }
+  });
 
   const savingProgress =
     savingGoal > 0
@@ -82,17 +110,6 @@ export default function Dashboard({ userEmail }) {
     setTransactions([newTx, ...transactions]);
     setAmount("");
   }
-
-  const categoryTotals = useMemo(() => {
-    const totals = {};
-    transactions.forEach((t) => {
-      if (t.type === "Expense") {
-        totals[t.category] =
-          (totals[t.category] || 0) + t.amount;
-      }
-    });
-    return totals;
-  }, [transactions]);
 
   const pieData = {
     labels: Object.keys(categoryTotals),
@@ -124,7 +141,10 @@ export default function Dashboard({ userEmail }) {
               {userEmail}
             </div>
           </div>
-          <button style={S.logout} onClick={() => signOut()}>
+          <button
+            style={S.logout}
+            onClick={() => signOut()}
+          >
             Logout
           </button>
         </div>
@@ -137,13 +157,17 @@ export default function Dashboard({ userEmail }) {
         </div>
 
         <div style={S.section}>
-          <div style={S.label}>Saving Goal</div>
+          <div style={S.label}>
+            Saving Goal
+          </div>
           <input
             type="number"
             placeholder="Target"
             value={savingGoal}
             onChange={(e) =>
-              setSavingGoal(Number(e.target.value))
+              setSavingGoal(
+                Number(e.target.value)
+              )
             }
             style={S.input}
           />
@@ -160,7 +184,9 @@ export default function Dashboard({ userEmail }) {
         <div style={S.section}>
           <select
             value={type}
-            onChange={(e) => setType(e.target.value)}
+            onChange={(e) =>
+              setType(e.target.value)
+            }
             style={S.input}
           >
             <option>Expense</option>
@@ -171,12 +197,16 @@ export default function Dashboard({ userEmail }) {
             <select
               value={category}
               onChange={(e) =>
-                setCategory(e.target.value)
+                setCategory(
+                  e.target.value
+                )
               }
               style={S.input}
             >
               {CATEGORIES.map((c) => (
-                <option key={c}>{c}</option>
+                <option key={c}>
+                  {c}
+                </option>
               ))}
             </select>
           )}
@@ -199,8 +229,8 @@ export default function Dashboard({ userEmail }) {
           </button>
         </div>
 
-        {Object.keys(categoryTotals).length >
-          0 && (
+        {Object.keys(categoryTotals)
+          .length > 0 && (
           <div style={{ marginTop: 30 }}>
             <ChartSection data={pieData} />
           </div>
@@ -208,7 +238,10 @@ export default function Dashboard({ userEmail }) {
 
         <div style={{ marginTop: 30 }}>
           {transactions.map((t) => (
-            <div key={t.id} style={S.row}>
+            <div
+              key={t.id}
+              style={S.row}
+            >
               <div>
                 {t.category}
               </div>
@@ -220,7 +253,9 @@ export default function Dashboard({ userEmail }) {
                       : "#ef4444",
                 }}
               >
-                {t.type === "Income" ? "+" : "-"}
+                {t.type === "Income"
+                  ? "+"
+                  : "-"}
                 {rupiah(t.amount)}
               </div>
             </div>
@@ -253,8 +288,14 @@ const S = {
     marginBottom: 20,
     flexWrap: "wrap",
   },
-  title: { fontSize: 20, fontWeight: 600 },
-  email: { fontSize: 12, color: "#9ca3af" },
+  title: {
+    fontSize: 20,
+    fontWeight: 600,
+  },
+  email: {
+    fontSize: 12,
+    color: "#9ca3af",
+  },
   logout: {
     background: "#1f2937",
     border: "none",
@@ -263,8 +304,14 @@ const S = {
     borderRadius: 8,
   },
   hero: { marginBottom: 20 },
-  label: { fontSize: 12, color: "#9ca3af" },
-  saldo: { fontSize: 28, fontWeight: 700 },
+  label: {
+    fontSize: 12,
+    color: "#9ca3af",
+  },
+  saldo: {
+    fontSize: 28,
+    fontWeight: 700,
+  },
   section: {
     marginTop: 20,
     display: "flex",
